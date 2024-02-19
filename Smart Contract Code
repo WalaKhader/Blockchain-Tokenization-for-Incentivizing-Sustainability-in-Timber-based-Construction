@@ -1,0 +1,141 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract CreditToken {
+    mapping(address => uint256) public balanceOf;
+    string public name = "Credit Token";
+    string public symbol = "CT";
+    uint8 public decimals = 18;
+    uint256 public totalSupply;
+    address public owner;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the contract owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function mint(address _to, uint256 _amount) external onlyOwner {
+        balanceOf[_to] += _amount;
+        totalSupply += _amount;
+        emit Transfer(address(0), _to, _amount);
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+    owner = newOwner;
+    }
+}
+
+contract CCSC_CompanyRanking {
+    enum ApprovalStatus { NotRegistered, Pending, Approved, Rejected }
+    ApprovalStatus public status;
+    string public companyId;
+    string[] public documentHashes;
+    mapping(string => uint) public documentScores;
+    //uint public totalScore;
+    uint public reportedExpenditures;
+    CreditToken public CreditTokenContract;
+
+    address public registrationUnit;
+    address public approvalUnit;
+    address public ceWasteManagement;
+    address public constructionCompanyAddress;
+
+    event DocumentSubmitted(string documentHash);
+    event DocumentApproved(string documentHash, uint score);  // Event for document approval
+    event CompanyRanked(uint totalScore, uint Credit);
+    event CompanyRanked(uint _score,string rank, uint Credit);
+
+    modifier onlyRegistrationUnit() {
+        require(msg.sender == registrationUnit, "Not authorized");
+        _;
+    }
+
+    modifier onlyApprovalUnit() {
+        require(msg.sender == approvalUnit, "Not authorized");
+        _;
+    }
+
+    modifier onlyCEWasteManagement() {
+        require(msg.sender == ceWasteManagement, "Not authorized");
+        _;
+    }
+
+    constructor(address _registrationUnit, address _approvalUnit, address _ceWasteManagement, address _CreditToken) {
+        registrationUnit = _registrationUnit;
+        approvalUnit = _approvalUnit;
+        ceWasteManagement = _ceWasteManagement;
+        CreditTokenContract = CreditToken(_CreditToken);
+        status = ApprovalStatus.NotRegistered;
+    }
+
+    function register(string memory _companyId, address _companyAddress) public onlyRegistrationUnit {
+    require(status == ApprovalStatus.NotRegistered, "Company already registered");
+    companyId = _companyId;
+    constructionCompanyAddress = _companyAddress;
+    status = ApprovalStatus.Pending;
+}
+
+    function submitDocument(string memory documentHash) public {
+        require(status == ApprovalStatus.Pending, "Invalid company status");
+        documentHashes.push(documentHash);
+        emit DocumentSubmitted(documentHash);
+    }
+
+    // Function to approve a document and assign it a score
+    function approveDocument(string memory documentHash, uint score) public onlyApprovalUnit {
+        require(documentScores[documentHash] == 0, "Document already approved");
+        documentScores[documentHash] = score;
+        emit DocumentApproved(documentHash, score);
+    }
+
+    function confirmWithCE(bool isApproved) public onlyCEWasteManagement {
+        require(status == ApprovalStatus.Pending, "Invalid company status");
+        status = isApproved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
+    }
+
+    function reportExpenditures(uint _Amount) public {
+        reportedExpenditures = _Amount;
+    }
+
+    function approveCompany(uint _reportedExpenditures) public onlyApprovalUnit {
+    require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
+
+    // Calculate total score based on submitted documents
+    uint _score = 0;
+    for (uint i = 0; i < documentHashes.length; i++) {
+        string memory hash = documentHashes[i];
+        _score += documentScores[hash];
+    }
+
+    // Determine rank and credit percentage based on score
+    uint percentage;
+    string memory rank; // Changed to memory since it's a local variable
+    if (_score >= 90) {
+        percentage = 30;
+        rank = "A";
+    } else if (_score >= 70) {
+        percentage = 20;
+        rank = "B";
+    } else if (_score >= 50) {
+        percentage = 10;
+        rank = "C";
+    } else {
+        percentage = 0;
+        rank = "D";
+    }
+
+    // Calculate credit amount
+    uint256 Credit = (_reportedExpenditures * percentage) / 100;
+
+    // Mint the credit token to the construction company's address
+    CreditTokenContract.mint(constructionCompanyAddress, Credit);
+    emit CompanyRanked(_score, rank, Credit);
+    }
+}
+
