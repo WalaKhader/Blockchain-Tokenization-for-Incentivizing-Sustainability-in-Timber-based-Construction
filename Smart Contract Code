@@ -113,8 +113,8 @@ contract CCSC_CompanyRanking {
 
     /// Submit TOPSIS score, rank company, and mint credits in one step
     function rankAndIncentiviseCompany(uint _score) public onlyApprovalUnit {
-        require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
-        require(_score <= 100, "Score must be 0–100");
+        require(status == ApprovalStatus.Approved);
+        require(_score <= 100);
 
         topsisScore = _score;
 
