@@ -36,9 +36,9 @@ contract CCSC_CompanyRanking {
     ApprovalStatus public status;
     string public companyId;
     string[] public documentHashes;
-    mapping(string => uint) public documentScores; // 
+    mapping(string => uint) public documentScores;
     uint public reportedExpenditures;
-    uint public topsisScore; // 
+    uint public topsisScore;
     CreditToken public CreditTokenContract;
 
     address public registrationUnit;
@@ -48,7 +48,6 @@ contract CCSC_CompanyRanking {
 
     event DocumentSubmitted(string documentHash);
     event DocumentApproved(string documentHash, uint score);
-    event TopsisScoreSubmitted(uint score);
     event CompanyRanked(uint score, string rank, uint credit);
 
     modifier onlyRegistrationUnit() {
@@ -112,18 +111,12 @@ contract CCSC_CompanyRanking {
         reportedExpenditures = _amount;
     }
 
-    /// Submit off-chain computed TOPSIS score
-    function submitTopsisScore(uint _score) public onlyApprovalUnit {
+    /// Submit TOPSIS score, rank company, and mint credits in one step
+    function rankAndIncentiviseCompany(uint _score) public onlyApprovalUnit {
         require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
         require(_score <= 100, "Score must be 0–100");
-        topsisScore = _score;
-        emit TopsisScoreSubmitted(_score);
-    }
 
-    /// Finalize ranking and mint credits
-    function approveCompany() public onlyApprovalUnit {
-        require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
-        require(topsisScore > 0, "TOPSIS score not submitted");
+        topsisScore = _score;
 
         uint percentage;
         string memory rank;
