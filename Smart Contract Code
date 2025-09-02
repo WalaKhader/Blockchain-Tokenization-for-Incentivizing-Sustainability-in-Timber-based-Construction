@@ -27,7 +27,7 @@ contract CreditToken {
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
-    owner = newOwner;
+        owner = newOwner;
     }
 }
 
@@ -36,9 +36,9 @@ contract CCSC_CompanyRanking {
     ApprovalStatus public status;
     string public companyId;
     string[] public documentHashes;
-    mapping(string => uint) public documentScores;
-    //uint public totalScore;
+    mapping(string => uint) public documentScores; // 
     uint public reportedExpenditures;
+    uint public topsisScore; // 
     CreditToken public CreditTokenContract;
 
     address public registrationUnit;
@@ -47,9 +47,9 @@ contract CCSC_CompanyRanking {
     address public constructionCompanyAddress;
 
     event DocumentSubmitted(string documentHash);
-    event DocumentApproved(string documentHash, uint score);  // Event for document approval
-    event CompanyRanked(uint totalScore, uint Credit);
-    event CompanyRanked(uint _score,string rank, uint Credit);
+    event DocumentApproved(string documentHash, uint score);
+    event TopsisScoreSubmitted(uint score);
+    event CompanyRanked(uint score, string rank, uint credit);
 
     modifier onlyRegistrationUnit() {
         require(msg.sender == registrationUnit, "Not authorized");
@@ -66,7 +66,12 @@ contract CCSC_CompanyRanking {
         _;
     }
 
-    constructor(address _registrationUnit, address _approvalUnit, address _ceWasteManagement, address _CreditToken) {
+    constructor(
+        address _registrationUnit,
+        address _approvalUnit,
+        address _ceWasteManagement,
+        address _CreditToken
+    ) {
         registrationUnit = _registrationUnit;
         approvalUnit = _approvalUnit;
         ceWasteManagement = _ceWasteManagement;
@@ -74,68 +79,73 @@ contract CCSC_CompanyRanking {
         status = ApprovalStatus.NotRegistered;
     }
 
+    /// Company registration
     function register(string memory _companyId, address _companyAddress) public onlyRegistrationUnit {
-    require(status == ApprovalStatus.NotRegistered, "Company already registered");
-    companyId = _companyId;
-    constructionCompanyAddress = _companyAddress;
-    status = ApprovalStatus.Pending;
-}
+        require(status == ApprovalStatus.NotRegistered, "Company already registered");
+        companyId = _companyId;
+        constructionCompanyAddress = _companyAddress;
+        status = ApprovalStatus.Pending;
+    }
 
+    /// Submit supporting document
     function submitDocument(string memory documentHash) public {
         require(status == ApprovalStatus.Pending, "Invalid company status");
         documentHashes.push(documentHash);
         emit DocumentSubmitted(documentHash);
     }
 
-    // Function to approve a document and assign it a score
+    /// Approve and score a submitted document
     function approveDocument(string memory documentHash, uint score) public onlyApprovalUnit {
         require(documentScores[documentHash] == 0, "Document already approved");
         documentScores[documentHash] = score;
         emit DocumentApproved(documentHash, score);
     }
 
+    /// Confirmation by CE Waste Management
     function confirmWithCE(bool isApproved) public onlyCEWasteManagement {
         require(status == ApprovalStatus.Pending, "Invalid company status");
         status = isApproved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
     }
 
-    function reportExpenditures(uint _Amount) public {
-        reportedExpenditures = _Amount;
+    /// Report timber expenditures
+    function reportExpenditures(uint _amount) public {
+        reportedExpenditures = _amount;
     }
 
-    function approveCompany(uint _reportedExpenditures) public onlyApprovalUnit {
-    require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
-
-    // Calculate total score based on submitted documents
-    uint _score = 0;
-    for (uint i = 0; i < documentHashes.length; i++) {
-        string memory hash = documentHashes[i];
-        _score += documentScores[hash];
+    /// Submit off-chain computed TOPSIS score
+    function submitTopsisScore(uint _score) public onlyApprovalUnit {
+        require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
+        require(_score <= 100, "Score must be 0–100");
+        topsisScore = _score;
+        emit TopsisScoreSubmitted(_score);
     }
 
-    // Determine rank and credit percentage based on score
-    uint percentage;
-    string memory rank; // Changed to memory since it's a local variable
-    if (_score >= 90) {
-        percentage = 30;
-        rank = "A";
-    } else if (_score >= 70) {
-        percentage = 20;
-        rank = "B";
-    } else if (_score >= 50) {
-        percentage = 10;
-        rank = "C";
-    } else {
-        percentage = 0;
-        rank = "D";
+    /// Finalize ranking and mint credits
+    function approveCompany() public onlyApprovalUnit {
+        require(status == ApprovalStatus.Approved, "Company not confirmed by CE Waste Management");
+        require(topsisScore > 0, "TOPSIS score not submitted");
+
+        uint percentage;
+        string memory rank;
+
+        if (topsisScore >= 90) {
+            percentage = 30; rank = "A";
+        } else if (topsisScore >= 70) {
+            percentage = 20; rank = "B";
+        } else if (topsisScore >= 50) {
+            percentage = 10; rank = "C";
+        } else {
+            percentage = 0; rank = "D";
+        }
+
+        uint256 credit = (reportedExpenditures * percentage) / 100;
+        CreditTokenContract.mint(constructionCompanyAddress, credit);
+
+        emit CompanyRanked(topsisScore, rank, credit);
     }
 
-    // Calculate credit amount
-    uint256 Credit = (_reportedExpenditures * percentage) / 100;
-
-    // Mint the credit token to the construction company's address
-    CreditTokenContract.mint(constructionCompanyAddress, Credit);
-    emit CompanyRanked(_score, rank, Credit);
+    /// Helper: get all submitted documents
+    function getDocuments() public view returns (string[] memory) {
+        return documentHashes;
     }
 }
-
